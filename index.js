@@ -1,93 +1,60 @@
 const axios = require('axios');
 
-class ErrorSDK {
+class ErrorMonitor {
+  static #APIendpoint = 'http://localhost:8000'; // Change to where the lambda runs
+
   constructor(projectID) {
-    this.APIendpoint = 'http://localhost:8000';
     this.projectID = projectID; // TODO: needs to be generated and given to the user
     // this.releaseVersion = releaseVersion;
-    this.#init();
+    process.on('uncaughtException', (e) => this.#handleUncaughtException(e));
+    // process.on('unhandledRejection', (e) => this.#handleUnhandledRejection(e));
   }
 
   setUpExpressErrorHandler(app) {
     app.use((e, req, res, next) => {
-
-      console.log('[error sdk] from SDK middleware:');
-      console.log('[error sdk] req object props:', Object.getOwnPropertyNames(req));
-      console.log('[error sdk] e object props:', Object.getOwnPropertyNames(e));
-
-      // ? Difference req.url vs req.originalURL? What is req.statusCode?
-
-      const errorData = this.#processError(e);
-      const requestData = this.#processRequest(req);
-      this.#logError(errorData, requestData);
-      next(e); // Optional
+      this.#logError(e, false);
+      next(e);
     });
   }
 
   captureException(e) {
-    const errorData = this.#processError(e);
-    this.#logError(errorData);
-
-    next(e); // ? Optional
+    this.#logError(e, true);
+    next(e); // ???
   }
 
   // * --- Private Methods --- * //
-  #init() {
-    // These two are for errors that escape Express' error handling system 
-    // (i.e. synchronous errors inside routes)
-    process.on('uncaughtException', (e) => this.#handleUncaughtException(e));
-    process.on('unhandledRejection', (e) => this.#handleUnhandledRejecetion(e));
-  }
-
   #handleUncaughtException(e) {
-    console.log('[error sdk] unhandledException:');
-    console.log('[error sdk]', e);
-    console.log('[error sdk] e object props:', Object.getOwnPropertyNames(e));
-
-    const errorData = this.#processError(e);
-    this.#logError(errorData);
+    this.#logError(errorData, false);
     process.exit(1);
   }
 
-  #handleUnhandledRejecetion(e) {
-    console.log('[error sdk] from unhandledRejection:');
+  // #handleUnhandledRejection(e) {
+  //   console.log('[error sdk] from unhandledRejection:');
     
-    if (e instanceof Error) {
-      console.log('[error sdk]', e);
-      console.log('[error sdk] e object props:', Object.getOwnPropertyNames(e));
+  //   if (e instanceof Error) {
+  //     console.log('[error sdk]', e);
+  //     console.log('[error sdk] e object props:', Object.getOwnPropertyNames(e));
 
-      const errorData = this.#processError(e);
-      this.#logError(errorData);
-    } else {
-      console.log('[error sdk] rejected value:', e);
+  //     this.#logError(e, 'unhandled');
+  //   } else {
+  //     console.log('[error sdk] rejected value:', e);
+  //   }
+
+  //   process.exit(1);
+  // }
+
+  async #logError(error, handled) {
+    const data = { 
+      error,
+      handled,
+      timestamp: new Date().toISOString(),
+      project_id: this.projectID,
     }
 
-    process.exit(1);
-  }
-
-  #processError(e) {
-    return {
-      message: e.message,
-      stack: e.stack,
-      time: new Date().toISOString(),
-    }
-  }
-
-  #processRequest(req) {
-    return {
-      url: req.url,
-      method: req.method,
-      params: req.params,
-      query: req.query,
-    }
-  }
-
-  async #logError(errorData, requestData = {}) {
-    const data = { error: errorData, req: requestData }
     console.log('[error sdk] Sending error to backend...');
     const response = await axios.post(`${this.APIendpoint}/api/errors`, data);
     console.log('[error sdk]', response.status, response.data.message );
   }
 }
 
-module.exports = ErrorSDK;
+module.exports = ErrorMonitor;
