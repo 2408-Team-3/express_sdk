@@ -45,14 +45,18 @@ class ErrorMonitor {
 
   async #logError(error, handled) {
     const data = { 
-      error,
+      error: {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      },
       handled,
       timestamp: new Date().toISOString(),
       project_id: this.projectID,
     }
 
     console.log('[error sdk] Sending error to backend...');
-    const response = await axios.post(`${this.APIendpoint}/api/errors`, data);
+    const response = await axios.post(`${ErrorMonitor.#APIendpoint}/api/errors`, data);
     console.log('[error sdk]', response.status, response.data.message );
   }
 }
